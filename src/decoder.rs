@@ -32,7 +32,7 @@ fn decode(opcode: usize) -> Instruction {
                 AddressingMode::DataDirect(part2 >> 3),
                 decode_addressing_mode(part3),
             ),
-            (_, _) => match (part2 >> 2) & 0b000100 {
+            (_, _) => match (part2 >> 2) & 0b1 {
                 0b0 => Instruction::OR(
                     DataSizeIdentifier::TwoBit(part2 & 0b11).into(),
                     decode_addressing_mode(part3),
@@ -121,8 +121,8 @@ fn test_decode_or_z() {
         instruction,
         Instruction::OR(
             DataSize::Byte,
-            AddressingMode::AddressIndirect(0),
             AddressingMode::DataDirect(1),
+            AddressingMode::AddressIndirect(0),
         )
     );
 }
