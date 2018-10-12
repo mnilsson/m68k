@@ -6,4 +6,7 @@ pub enum Instruction {
     DIVS(DataSize, AddressingMode, AddressingMode),
     OR(DataSize, AddressingMode, AddressingMode),
     SBCD(AddressingMode, AddressingMode),
+    SUB(DataSize, AddressingMode, AddressingMode),
+    SUBA(DataSize, AddressingMode, AddressingMode),
+    SUBX(DataSize, AddressingMode, AddressingMode),
 }
