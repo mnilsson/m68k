@@ -1,0 +1,7 @@
+[package]
+name = "m68k"
+version = "0.1.0"
+authors = ["Markus Nilsson <markus@mnilsson.se>"]
+
+[dependencies]
+bitflags = "1.0.3"
