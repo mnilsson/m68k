@@ -10,7 +10,13 @@ pub enum DataSizeIdentifier {
     TwoBit(usize),
 }
 
-pub fn decode_data_size(bits: DataSizeIdentifier) -> DataSize {
+impl Into<DataSize> for DataSizeIdentifier {
+    fn into(self) -> DataSize {
+        decode_data_size(self)
+    }
+}
+
+fn decode_data_size(bits: DataSizeIdentifier) -> DataSize {
     match bits {
         DataSizeIdentifier::OneBit(bits) => match bits & 0b1 {
             0b0 => DataSize::Word,

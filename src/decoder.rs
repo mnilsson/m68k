@@ -1,6 +1,4 @@
-use addressing_mode::{
-    decode_addressing_mode, decode_data_size, AddressingMode, DataSize, DataSizeIdentifier,
-};
+use addressing_mode::{decode_addressing_mode, AddressingMode, DataSize, DataSizeIdentifier};
 use instruction_set::Instruction;
 
 fn decode(opcode: usize) -> Instruction {
