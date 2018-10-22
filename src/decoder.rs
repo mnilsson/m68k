@@ -79,6 +79,17 @@ pub fn decode(opcode: usize) -> Instruction {
                 }
             }
         }
+        (0b0001, _, _) => {
+            Instruction::MOVE(DataSize::Byte, (part2l << 3 & part2h).into(), part3.into())
+        }
+        (0b0010, _, _) => Instruction::MOVE(
+            DataSize::LongWord,
+            (part2l << 3 & part2h).into(),
+            part3.into(),
+        ),
+        (0b0011, _, _) => {
+            Instruction::MOVE(DataSize::Word, (part2l << 3 & part2h).into(), part3.into())
+        }
         (0b1000, _, _) => match (part2l, part3h) {
             (0b011, _) => Instruction::DIVU(
                 DataSize::Word,

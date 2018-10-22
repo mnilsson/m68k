@@ -30,4 +30,5 @@ pub enum Instruction {
     BCLR(DataSize, AddressingMode, AddressingMode),
     BSET(DataSize, AddressingMode, AddressingMode),
     MOVEP(DataSize, AddressingMode, AddressingMode),
+    MOVE(DataSize, AddressingMode, AddressingMode),
 }
