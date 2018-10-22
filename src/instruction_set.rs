@@ -31,4 +31,7 @@ pub enum Instruction {
     BSET(DataSize, AddressingMode, AddressingMode),
     MOVEP(DataSize, AddressingMode, AddressingMode),
     MOVE(DataSize, AddressingMode, AddressingMode),
+    ADDA(DataSize, AddressingMode, AddressingMode),
+    ADDX(DataSize, AddressingMode, AddressingMode),
+    ADD(DataSize, AddressingMode, AddressingMode),
 }

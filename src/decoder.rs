@@ -152,6 +152,40 @@ pub fn decode(opcode: usize) -> Instruction {
                 ),
             },
         },
+        (0b1101, _, _) => {
+            if part2l & 0b11 == 0b11 {
+                Instruction::ADDA(
+                    DataSizeIdentifier::OneBit(part2l >> 2).into(),
+                    part3.into(),
+                    AddressingMode::AddressDirect(part2h),
+                )
+            } else {
+                let bit = part2l >> 2;
+                match (bit, part3h) {
+                    (0b1, 0b000) => Instruction::ADDX(
+                        DataSizeIdentifier::TwoBit(part2l & 0b11).into(),
+                        AddressingMode::DataDirect(part3l),
+                        AddressingMode::DataDirect(part2h),
+                    ),
+                    (0b1, 0b001) => Instruction::ADDX(
+                        DataSizeIdentifier::TwoBit(part2l & 0b11).into(),
+                        AddressingMode::AddressIndirectPreDecrement(part3l),
+                        AddressingMode::AddressIndirectPreDecrement(part2h),
+                    ),
+                    (0b0, _) => Instruction::ADD(
+                        DataSizeIdentifier::TwoBit(part2l & 0b11).into(),
+                        part3.into(),
+                        AddressingMode::DataDirect(part2h),
+                    ),
+                    (0b1, _) => Instruction::ADD(
+                        DataSizeIdentifier::TwoBit(part2l & 0b11).into(),
+                        AddressingMode::DataDirect(part2h),
+                        part3.into(),
+                    ),
+                    (_, _) => unreachable!(),
+                }
+            }
+        }
         (0b1110, _, _) => {
             let size = DataSize::Word;
             let value = AddressingMode::Value(1);
