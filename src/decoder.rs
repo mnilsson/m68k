@@ -246,9 +246,11 @@ pub fn decode(opcode: usize) -> Instruction {
                 DataSize::LongWord,
                 AddressingMode::DataDirect(part3l),
                 AddressingMode::DataDirect(part2h),
+            ),
             (0b100, 0b001) => Instruction::ABCD(
                 AddressingMode::AddressIndirectPreDecrement(part3l),
                 AddressingMode::AddressIndirectPreDecrement(part2h),
+            ),
             (0b101, 0b001) => Instruction::EXG(
                 DataSize::LongWord,
                 AddressingMode::AddressDirect(part3l),
@@ -433,72 +435,4 @@ fn decode_0100(opcode: usize) -> Instruction {
         },
         _ => unreachable!(),
     }
-}
-
-#[test]
-fn test_decode_divu_w() {
-    let opcode = 0b1000_000011_000001;
-    let instruction = decode(opcode);
-    assert_eq!(
-        instruction,
-        Instruction::DIVU(
-            DataSize::Word,
-            AddressingMode::DataDirect(1),
-            AddressingMode::DataDirect(0),
-        )
-    );
-}
-
-#[test]
-fn test_decode_or_z() {
-    // or.z a,Dd
-    //             1000 ddd0zz aaaaaa
-    let opcode = 0b1000_000000_000001;
-    let instruction = decode(opcode);
-    assert_eq!(
-        instruction,
-        Instruction::OR(
-            DataSize::Byte,
-            AddressingMode::DataDirect(1),
-            AddressingMode::DataDirect(0),
-        )
-    );
-
-    // or.z Ds,a
-    //             1000 sss1zz aaaaaa
-    let opcode = 0b1000_001100_010000;
-    let instruction = decode(opcode);
-    assert_eq!(
-        instruction,
-        Instruction::OR(
-            DataSize::Byte,
-            AddressingMode::DataDirect(1),
-            AddressingMode::AddressIndirect(0),
-        )
-    );
-}
-
-#[test]
-fn test_decode_btst() {
-    let opcode = 0b0000_100000_010010;
-    let instruction = decode(opcode);
-    assert_eq!(
-        instruction,
-        Instruction::BTST(
-            DataSize::Byte,
-            AddressingMode::Immediate,
-            AddressingMode::AddressIndirect(0b010)
-        )
-    );
-
-    let opcode = 0b0000_011100_000010;
-    let instruction = decode(opcode);
-    assert_eq!(
-        instruction,
-        Instruction::BTST(
-            DataSize::LongWord,
-            AddressingMode::DataDirect(0b011),
-            AddressingMode::DataDirect(0b010)
-        )
-    );
 }

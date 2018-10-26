@@ -1,3 +1,3 @@
-mod addressing_mode;
+pub mod addressing_mode;
 pub mod decoder;
-mod instruction_set;
+pub mod instruction_set;
