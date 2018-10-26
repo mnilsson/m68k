@@ -1,4 +1,4 @@
-use addressing_mode::{AddressingMode, DataSize};
+use addressing_mode::{AddressingMode, ConditionCode, DataSize};
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
@@ -34,4 +34,51 @@ pub enum Instruction {
     ADDA(DataSize, AddressingMode, AddressingMode),
     ADDX(DataSize, AddressingMode, AddressingMode),
     ADD(DataSize, AddressingMode, AddressingMode),
+    RESET,
+    NOP,
+    STOP(AddressingMode),
+    RTE,
+    RTS,
+    TRAPV,
+    RTR,
+
+    AND(DataSize, AddressingMode, AddressingMode),
+    MULU(DataSize, AddressingMode, AddressingMode),
+    ABCD(AddressingMode, AddressingMode),
+    EXG(DataSize, AddressingMode, AddressingMode),
+    MULS(DataSize, AddressingMode, AddressingMode),
+
+    BRA(AddressingMode),
+    BSR(AddressingMode),
+    BCC(ConditionCode, AddressingMode),
+    MOVEQ(DataSize, AddressingMode, AddressingMode),
+
+    CMP(DataSize, AddressingMode, AddressingMode),
+    CMPA(DataSize, AddressingMode, AddressingMode),
+    CMPM(DataSize, AddressingMode, AddressingMode),
+    EOR(DataSize, AddressingMode, AddressingMode),
+
+    SUBQ(DataSize, AddressingMode, AddressingMode),
+    ADDQ(DataSize, AddressingMode, AddressingMode),
+    ST(DataSize, ConditionCode, AddressingMode),
+    DB(ConditionCode, AddressingMode, AddressingMode),
+
+    LEA(AddressingMode, AddressingMode),
+    CHK(DataSize, AddressingMode, AddressingMode),
+    JMP(AddressingMode),
+    JSR(AddressingMode),
+    TRAP(AddressingMode),
+    UNLK(AddressingMode),
+    LINK(AddressingMode, AddressingMode),
+    MOVEM(DataSize, AddressingMode, AddressingMode),
+    TST(DataSize, AddressingMode),
+    TAS(DataSize, AddressingMode),
+    EXT(DataSize, AddressingMode),
+    PEA(AddressingMode),
+    SWAP(DataSize, AddressingMode),
+    NBCD(AddressingMode),
+    NOT(DataSize, AddressingMode),
+    NEG(DataSize, AddressingMode),
+    NEGX(DataSize, AddressingMode),
+    CLR(DataSize, AddressingMode),
 }

@@ -49,6 +49,10 @@ pub enum AddressingMode {
     PCIndirectIndexed,
     Immediate,
     Value(Value),
+    Vector(Value),
+    SR,
+    CCR,
+    USP,
 }
 impl Into<AddressingMode> for usize {
     fn into(self) -> AddressingMode {
@@ -76,6 +80,7 @@ pub fn decode_addressing_mode(bits: usize) -> AddressingMode {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ConditionCode {
     CC, // Carry Clear
     LS, // Lower or Same
