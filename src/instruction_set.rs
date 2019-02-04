@@ -1,4 +1,4 @@
-use addressing_mode::{AddressingMode, ConditionCode, DataSize};
+use addressing_mode::{AddressingMode, Condition, DataSize};
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
@@ -50,7 +50,7 @@ pub enum Instruction {
 
     BRA(AddressingMode),
     BSR(AddressingMode),
-    BCC(ConditionCode, AddressingMode),
+    BCC(Condition, AddressingMode),
     MOVEQ(DataSize, AddressingMode, AddressingMode),
 
     CMP(DataSize, AddressingMode, AddressingMode),
@@ -60,8 +60,8 @@ pub enum Instruction {
 
     SUBQ(DataSize, AddressingMode, AddressingMode),
     ADDQ(DataSize, AddressingMode, AddressingMode),
-    ST(DataSize, ConditionCode, AddressingMode),
-    DB(ConditionCode, AddressingMode, AddressingMode),
+    ST(DataSize, Condition, AddressingMode),
+    DB(Condition, AddressingMode, AddressingMode),
 
     LEA(AddressingMode, AddressingMode),
     CHK(DataSize, AddressingMode, AddressingMode),
@@ -70,7 +70,7 @@ pub enum Instruction {
     TRAP(AddressingMode),
     UNLK(AddressingMode),
     LINK(AddressingMode, AddressingMode),
-    MOVEM(DataSize, AddressingMode, AddressingMode),
+    MOVEM(DataSize, AddressingMode, u8),
     TST(DataSize, AddressingMode),
     TAS(DataSize, AddressingMode),
     EXT(DataSize, AddressingMode),

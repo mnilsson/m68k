@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DataSize {
     Byte,
     Word,
@@ -71,8 +71,8 @@ pub fn decode_addressing_mode(bits: usize) -> AddressingMode {
         (0b100, _) => AddressingMode::AddressIndirectPreDecrement(part2),
         (0b101, _) => AddressingMode::AddressIndirectDisplacement(part2),
         (0b110, _) => AddressingMode::AddressIndirectIndexedAndDisplacement(part2),
-        (0b111, 0b000) => AddressingMode::AbsoluteAddress(DataSize::Byte),
-        (0b111, 0b001) => AddressingMode::AbsoluteAddress(DataSize::Word),
+        (0b111, 0b000) => AddressingMode::AbsoluteAddress(DataSize::Word),
+        (0b111, 0b001) => AddressingMode::AbsoluteAddress(DataSize::LongWord),
         (0b111, 0b010) => AddressingMode::PCIndirectDisplacementMode,
         (0b111, 0b011) => AddressingMode::PCIndirectIndexed,
         (0b111, 0b100) => AddressingMode::Immediate,
@@ -81,7 +81,7 @@ pub fn decode_addressing_mode(bits: usize) -> AddressingMode {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ConditionCode {
+pub enum Condition {
     CC, // Carry Clear
     LS, // Lower or Same
     CS, // Carry Set
@@ -100,25 +100,25 @@ pub enum ConditionCode {
     VS, // oVerflow Set
 }
 
-impl Into<ConditionCode> for usize {
-    fn into(self) -> ConditionCode {
+impl Into<Condition> for usize {
+    fn into(self) -> Condition {
         match self & 0b1111 {
-            0b0000 => ConditionCode::T,
-            0b0001 => ConditionCode::F,
-            0b0010 => ConditionCode::HI,
-            0b0011 => ConditionCode::LS,
-            0b0100 => ConditionCode::CC,
-            0b0101 => ConditionCode::CS,
-            0b0110 => ConditionCode::NE,
-            0b0111 => ConditionCode::EQ,
-            0b1000 => ConditionCode::VC,
-            0b1001 => ConditionCode::VS,
-            0b1010 => ConditionCode::PL,
-            0b1011 => ConditionCode::MI,
-            0b1100 => ConditionCode::GE,
-            0b1101 => ConditionCode::LT,
-            0b1110 => ConditionCode::GT,
-            0b1111 => ConditionCode::LE,
+            0b0000 => Condition::T,
+            0b0001 => Condition::F,
+            0b0010 => Condition::HI,
+            0b0011 => Condition::LS,
+            0b0100 => Condition::CC,
+            0b0101 => Condition::CS,
+            0b0110 => Condition::NE,
+            0b0111 => Condition::EQ,
+            0b1000 => Condition::VC,
+            0b1001 => Condition::VS,
+            0b1010 => Condition::PL,
+            0b1011 => Condition::MI,
+            0b1100 => Condition::GE,
+            0b1101 => Condition::LT,
+            0b1110 => Condition::GT,
+            0b1111 => Condition::LE,
             _ => unreachable!(),
         }
     }

@@ -5,6 +5,29 @@ mod test_m68k {
     use m68k::addressing_mode::{AddressingMode, DataSize};
     use m68k::decoder::decode;
     use m68k::instruction_set::Instruction;
+    use m68k::vm::VirtualMachine;
+
+    // #[test]
+    // fn test_decode() {
+    //     let prg = vec![
+    //         0x4E, 0x71, 0x4E, 0x71, 0x60, 0xFA, 0x01, 0x11, 0x66, 0xFC, 0x74, 0x25, 0x10, 0xDD,
+    //         0x51, 0xCA, 0xFF, 0xFC, 0x34, 0x80, 0x32, 0x80,
+    //     ];
+    //     let mut pc = 0;
+    //     loop {
+    //         let h = prg[pc];
+    //         pc += 1;
+    //         let l = prg[pc];
+    //         pc += 1;
+    //         let op = (h << 8) | l;
+    //         print!("{:X} {:016b}: ", op, op);
+    //         let decoded = decode(op);
+    //         println!("{:?}", decoded);
+    //         if pc > prg.len() {
+    //             break;
+    //         }
+    //     }
+    // }
 
     #[test]
     fn test_decode_divu_w() {

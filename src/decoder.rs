@@ -88,15 +88,15 @@ pub fn decode(opcode: usize) -> Instruction {
             }
         }
         (0b0001, _, _) => {
-            Instruction::MOVE(DataSize::Byte, (part2l << 3 & part2h).into(), part3.into())
+            Instruction::MOVE(DataSize::Byte, part3.into(), (part2l << 3 | part2h).into())
         }
         (0b0010, _, _) => Instruction::MOVE(
             DataSize::LongWord,
-            (part2l << 3 & part2h).into(),
             part3.into(),
+            (part2l << 3 | part2h).into(),
         ),
         (0b0011, _, _) => {
-            Instruction::MOVE(DataSize::Word, (part2l << 3 & part2h).into(), part3.into())
+            Instruction::MOVE(DataSize::Word, part3.into(), (part2l << 3 | part2h).into())
         }
         (0b0100, _, _) => decode_0100(opcode),
         (0b0101, _, _) => match (part2l & 0b11, part3h) {
@@ -311,6 +311,7 @@ pub fn decode(opcode: usize) -> Instruction {
                         AddressingMode::DataDirect(part2h),
                         part3.into(),
                     ),
+
                     (_, _) => unreachable!(),
                 }
             }
@@ -372,7 +373,7 @@ fn decode_0100(opcode: usize) -> Instruction {
 
     let one_bit_size = DataSizeIdentifier::OneBit(part2l & 0b1);
     let two_bit_size = DataSizeIdentifier::TwoBit(part2l & 0b11);
-    match part2h >> 2 {
+    match part2l >> 2 {
         0b0 => match (part2h, part2l, part3h) {
             (0b000, 0b011, _) => {
                 Instruction::MOVE(DataSize::Word, AddressingMode::SR, part3.into())
@@ -396,14 +397,10 @@ fn decode_0100(opcode: usize) -> Instruction {
             (0b100, _, 0b000) => {
                 Instruction::EXT(one_bit_size.into(), AddressingMode::DataDirect(part3l))
             }
-            (0b100, _, _) => {
-                Instruction::MOVEM(one_bit_size.into(), AddressingMode::Immediate, part3.into())
-            }
+            (0b100, _, _) => Instruction::MOVEM(one_bit_size.into(), part3.into(), 0),
             (0b101, 0b011, _) => Instruction::TAS(DataSize::Byte, part3.into()),
             (0b101, _, _) => Instruction::TST(two_bit_size.into(), part3.into()),
-            (0b110, _, _) => {
-                Instruction::MOVEM(one_bit_size.into(), part3.into(), AddressingMode::Immediate)
-            }
+            (0b110, _, _) => Instruction::MOVEM(one_bit_size.into(), part3.into(), 1),
             (0b111, 0b001, 0b010) => Instruction::LINK(
                 AddressingMode::AddressDirect(part3l),
                 AddressingMode::Immediate,
@@ -431,7 +428,7 @@ fn decode_0100(opcode: usize) -> Instruction {
                 AddressingMode::DataDirect(part2h),
             ),
             0b111 => Instruction::LEA(part3.into(), AddressingMode::AddressDirect(part2h)),
-            _ => unreachable!(),
+            _ => panic!("{:04X} {:016b}", opcode, opcode),
         },
         _ => unreachable!(),
     }
