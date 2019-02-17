@@ -1,10 +1,14 @@
-use addressing_mode::{AddressingMode, Condition, DataSize};
+use addressing_mode::{
+    read_addressing_mode, read_addressing_mode_address, write_addressing_mode, AddressingMode,
+    Condition, DataSize,
+};
 use decoder::decode;
 use instruction_set::Instruction;
 use mapped_hardware::MappedHardware;
 use registers::{ConditionCode, Registers};
 
 use std::ops::Add;
+use value::Value;
 
 #[derive(Debug)]
 enum InstructionStep {
@@ -21,210 +25,6 @@ impl Default for InstructionStep {
 
 struct Address(u32);
 
-#[derive(Debug, Clone, Copy)]
-pub enum Value {
-    Byte(u8),
-    Word(u16),
-    LongWord(u32),
-}
-
-impl Value {
-    fn from_raw(size: DataSize, value: u32) -> Value {
-        match size {
-            DataSize::Byte => Value::Byte(value as u8),
-            DataSize::Word => Value::Word(value as u16),
-            DataSize::LongWord => Value::LongWord(value as u32),
-        }
-    }
-    fn or_cc(self, size: DataSize, value: Value) -> (Value, ConditionCode) {
-        let mut cc: ConditionCode = ConditionCode::empty();
-        match size {
-            DataSize::Byte => {
-                let s: u8 = self.into();
-                let v: u8 = value.into();
-                let r = s | v;
-
-                if r == 0 {
-                    cc.set(ConditionCode::Z, true);
-                }
-
-                if r & 0x80 == 0x80 {
-                    cc.set(ConditionCode::N, true);
-                }
-
-                (Value::Byte(r as u8), cc)
-            }
-            DataSize::Word => {
-                let s: u16 = self.into();
-                let v: u16 = value.into();
-
-                let r = s | v;
-
-                if r == 0 {
-                    cc.set(ConditionCode::Z, true);
-                }
-
-                if r & 0x8000 == 0x8000 {
-                    cc.set(ConditionCode::N, true);
-                }
-
-                (Value::Byte(r as u8), cc)
-            }
-            DataSize::LongWord => {
-                let s: u32 = self.into();
-                let v: u32 = value.into();
-                let r = s | v;
-
-                if r == 0 {
-                    cc.set(ConditionCode::Z, true);
-                }
-
-                if r & 0x8000_0000 == 0x8000_0000 {
-                    cc.set(ConditionCode::N, true);
-                }
-
-                (Value::Byte(r as u8), cc)
-            }
-        }
-    }
-
-    fn add_cc(self, size: DataSize, value: Value) -> (Value, ConditionCode) {
-        let mut cc: ConditionCode = ConditionCode::empty();
-        match size {
-            DataSize::Byte => {
-                let s: u8 = self.into();
-                let v: u8 = value.into();
-                let r = s as u16 + v as u16;
-                let max = 0xff;
-                let neg = 0x80;
-                if r > 0xff {
-                    cc.set(ConditionCode::C, true);
-                    cc.set(ConditionCode::X, true);
-                    cc.set(ConditionCode::V, true);
-                }
-
-                if r == 0 {
-                    cc.set(ConditionCode::Z, true);
-                }
-
-                if r & 0x80 == 0x80 {
-                    cc.set(ConditionCode::N, true);
-                }
-
-                (Value::Byte(r as u8), cc)
-            }
-            DataSize::Word => {
-                let s: u16 = self.into();
-                let v: u16 = value.into();
-                let r = s as u32 + v as u32;
-
-                if r > 0xffff {
-                    cc.set(ConditionCode::C, true);
-                    cc.set(ConditionCode::X, true);
-                    cc.set(ConditionCode::V, true);
-                }
-
-                if r == 0 {
-                    cc.set(ConditionCode::Z, true);
-                }
-
-                if r & 0x8000 == 0x8000 {
-                    cc.set(ConditionCode::N, true);
-                }
-
-                (Value::Word(r as u16), cc)
-            }
-            DataSize::LongWord => {
-                let s: u32 = self.into();
-                let v: u32 = value.into();
-                let r = s as u64 + v as u64;
-
-                if r > 0xffff_ffff {
-                    cc.set(ConditionCode::C, true);
-                    cc.set(ConditionCode::X, true);
-                    cc.set(ConditionCode::V, true);
-                }
-
-                if r == 0 {
-                    cc.set(ConditionCode::Z, true);
-                }
-
-                if r & 0x8000_0000 == 0x8000_0000 {
-                    cc.set(ConditionCode::N, true);
-                }
-
-                println!("{}", r);
-                (Value::LongWord(r as u32), cc)
-            }
-        }
-    }
-}
-
-impl Into<i32> for Value {
-    fn into(self) -> i32 {
-        match self {
-            Value::Byte(v) => v as i8 as i32,
-            Value::Word(v) => v as i16 as i32,
-            Value::LongWord(v) => v as i32,
-        }
-    }
-}
-
-impl Into<u32> for Value {
-    fn into(self) -> u32 {
-        match self {
-            Value::Byte(v) => v as u32,
-            Value::Word(v) => v as u32,
-            Value::LongWord(v) => v as u32,
-        }
-    }
-}
-
-impl Into<u8> for Value {
-    fn into(self) -> u8 {
-        match self {
-            Value::Byte(v) => v as u8,
-            Value::Word(v) => v as u8,
-            Value::LongWord(v) => v as u8,
-        }
-    }
-}
-
-impl Into<u16> for Value {
-    fn into(self) -> u16 {
-        match self {
-            Value::Byte(v) => v as u16,
-            Value::Word(v) => v as u16,
-            Value::LongWord(v) => v as u16,
-        }
-    }
-}
-
-impl Into<Value> for Option<u32> {
-    fn into(self) -> Value {
-        match self {
-            Some(val) => Value::LongWord(val),
-            _ => panic!("Not valid"),
-        }
-    }
-}
-
-impl Into<Value> for Option<u16> {
-    fn into(self) -> Value {
-        match self {
-            Some(val) => Value::Word(val),
-            _ => panic!("Not valid"),
-        }
-    }
-}
-impl Into<Value> for Option<u8> {
-    fn into(self) -> Value {
-        match self {
-            Some(val) => Value::Byte(val),
-            _ => panic!("Not valid"),
-        }
-    }
-}
 const ADDRESS_BUS_MASK: u32 = 0x7f_ffff;
 
 // directions
@@ -233,7 +33,7 @@ const ADDRESS_BUS_MASK: u32 = 0x7f_ffff;
 
 #[derive(Default, Debug)]
 pub struct Cpu {
-    registers: Registers,
+    pub registers: Registers,
     instruction_step: InstructionStep,
     instruction_clock: usize,
 
@@ -242,6 +42,17 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn tick<M: MappedHardware>(&mut self, bus: &M) {}
+
+    pub fn reset(&mut self, bus: &mut impl MappedHardware) {
+        self.set_pc(0);
+        let new_sp = self.read_immediate(bus, &DataSize::LongWord).into();
+
+        self.set_sp(new_sp);
+
+        self.immediate = None;
+        let new_pc = self.read_immediate(bus, &DataSize::LongWord).into();
+        self.registers.set_pc(new_pc);
+    }
 
     pub fn set_pc(&mut self, new_pc: u32) {
         self.registers.set_pc(new_pc);
@@ -253,22 +64,27 @@ impl Cpu {
 
     pub fn execute_next_instruction(&mut self, bus: &mut impl MappedHardware) {
         self.immediate = None;
+        let pc = self.registers.pc();
         let op = bus.read_word(self.registers.pc()).unwrap();
         self.registers.pc_increment();
         self.registers.pc_increment();
         let instr = decode(op as usize);
         let instr2 = decode(op as usize);
-        println!(
-            "{:04X} {:04X} {:?} {:?}",
-            self.registers.pc(),
-            op,
-            self.registers,
-            instr2
-        );
+        // match instr {
+        //     Instruction::MOVE(_, _, _) => {
+        //         println!("{:04X} {:04X} {:?} {:?}", pc, op, self.registers, instr2);
+        //     }
+        //     _ => (),
+        // }
+        // if op != 0 && pc != 0x264 && pc != 0x266 {
+        println!("{:04X} {:04X} {:?} {:?}", pc, op, self.registers, instr2);
+        // }
+        // panic!();
+
         self.execute_instruction(bus, instr);
     }
 
-    fn read_immediate(&mut self, bus: &mut impl MappedHardware, size: &DataSize) -> Value {
+    pub fn read_immediate(&mut self, bus: &mut impl MappedHardware, size: &DataSize) -> Value {
         match self.immediate {
             Some(imm) => return imm,
             _ => (),
@@ -289,89 +105,24 @@ impl Cpu {
         immediate
     }
 
+    fn push_stack(&mut self, bus: &mut impl MappedHardware, size: DataSize, value: Value) {
+        match size {
+            DataSize::LongWord => {
+                let sp = self.registers.sp();
+                self.registers.set_sp(sp - 4);
+                bus.write_long(self.registers.sp(), value.into());
+            }
+            _ => unreachable!(),
+        }
+    }
+
     fn read_addressing_mode(
         &mut self,
         bus: &mut impl MappedHardware,
         size: &DataSize,
         addressing_mode: &AddressingMode,
     ) -> Value {
-        fn map_value(size: &DataSize, value: u32) -> Value {
-            match size {
-                DataSize::Byte => Value::Byte(value as u8),
-                DataSize::Word => Value::Word(value as u16),
-                DataSize::LongWord => Value::LongWord(value),
-            }
-        };
-
-        match addressing_mode {
-            AddressingMode::Value(ref value) => map_value(size, *value),
-            AddressingMode::DataDirect(ref reg) => map_value(size, self.registers.data(*reg)),
-            AddressingMode::Immediate => self.read_immediate(bus, size).into(),
-            AddressingMode::AbsoluteAddress(DataSize::Word) => {
-                let addr = self.read_immediate(bus, &DataSize::Word).into();
-                bus.read_word(addr).into()
-            }
-            AddressingMode::AbsoluteAddress(DataSize::LongWord) => {
-                let addr = self.read_immediate(bus, &DataSize::LongWord).into();
-                let v = match size {
-                    DataSize::Byte => bus.read_byte(addr).into(),
-                    DataSize::Word => bus.read_word(addr).into(),
-                    DataSize::LongWord => bus.read_long(addr).into(),
-                };
-                v
-            }
-            AddressingMode::AddressIndirectPostIncrement(ref reg) => {
-                let addr = self.registers.address(*reg);
-                let (incr, v) = match size {
-                    DataSize::Byte => (1, bus.read_byte(addr).into()),
-                    DataSize::Word => (2, bus.read_word(addr).into()),
-                    DataSize::LongWord => (4, bus.read_long(addr).into()),
-                };
-                self.registers.set_address(*reg, addr + incr);
-                v
-            }
-            AddressingMode::AddressIndirectDisplacement(ref reg) => {
-                let addr = self.registers.address(*reg);
-                let displacement: u16 = self
-                    .read_addressing_mode(bus, &DataSize::Word, &AddressingMode::Immediate)
-                    .into();
-                let addr = (addr as i64 - displacement as u16 as i64) as u32;
-
-                match size {
-                    DataSize::Byte => bus.read_byte(addr).into(),
-                    DataSize::Word => bus.read_word(addr).into(),
-                    DataSize::LongWord => bus.read_long(addr).into(),
-                }
-            }
-            AddressingMode::PCIndirectDisplacementMode => {
-                let pc = self.registers.pc();
-                let ext: u32 = self.read_immediate(bus, &DataSize::Word).into();
-
-                let displacement = if ext & 0x80 == 0x80 {
-                    ext | 0xffff_ff00
-                } else {
-                    ext & 0xff
-                };
-
-                let idxreg = ((ext >> 12) & 0x07) as usize;
-                let idxsize = if ext & 0x800 == 0x800 {
-                    DataSize::LongWord
-                } else {
-                    DataSize::Word
-                };
-                let idx_is_addr = ext & 0x8000 == 0x8000;
-
-                let idx_val = match (idx_is_addr, idxsize) {
-                    (true, DataSize::Word) => self.registers.address(idxreg) as u16 as u32,
-                    (true, DataSize::LongWord) => self.registers.address(idxreg),
-                    (false, DataSize::Word) => self.registers.data(idxreg) as u16 as u32,
-                    (false, DataSize::LongWord) => self.registers.data(idxreg),
-                    _ => unreachable!(),
-                };
-                Value::LongWord(pc + displacement + idx_val)
-            }
-            _ => unreachable!("{:?}", addressing_mode),
-        }
+        read_addressing_mode(self, bus, size, addressing_mode)
     }
 
     fn write_addressing_mode(
@@ -381,43 +132,46 @@ impl Cpu {
         addressing_mode: AddressingMode,
         value: Value,
     ) {
-        match addressing_mode {
-            AddressingMode::DataDirect(reg) => {
-                let current: u32 = self.registers.data(reg);
-                let current = match size {
-                    DataSize::Byte => current & 0xffff_ff00,
-                    DataSize::Word => current & 0xffff_0000,
-                    DataSize::LongWord => 0,
-                };
-                let value: u32 = value.into();
-                self.registers.set_data(reg, current | value)
-            }
-            AddressingMode::SR => self.registers.set_ccr(value.into()),
-            AddressingMode::AbsoluteAddress(DataSize::LongWord) => {
-                let address = self.read_immediate(bus, &DataSize::LongWord).into();
-                match size {
-                    DataSize::Byte => unimplemented!("write byte not implemented"),
-                    DataSize::Word => bus.write_word(address, value.into()),
-                    DataSize::LongWord => bus.write_word(address, value.into()),
-                };
-            }
-            _ => unimplemented!("{:?}", addressing_mode),
-        };
+        write_addressing_mode(self, bus, size, addressing_mode, value)
     }
 
     fn execute_instruction(&mut self, bus: &mut impl MappedHardware, instruction: Instruction) {
         match instruction {
             Instruction::ADDQ(size, value, dest) => self.add(bus, size, value, dest),
             Instruction::ADD(size, value, dest) => self.add(bus, size, value, dest),
+            Instruction::SUBI(size, value, dest) => self.sub(bus, size, value, dest),
+            Instruction::SUBA(size, value, dest) => self.sub(bus, size, value, dest),
+            Instruction::SUBQ(size, value, dest) => self.sub(bus, size, value, dest),
+            Instruction::SUB(size, value, dest) => self.sub(bus, size, value, dest),
+            Instruction::ADDI(size, value, dest) => self.add(bus, size, value, dest),
             Instruction::ANDI(size, source, dest) => self.andi(bus, size, source, dest),
+            Instruction::CMP(size, source, dest) => self.cmp(bus, size, source, dest),
+            Instruction::CMPI(size, ea) => self.cmp(bus, size, AddressingMode::Immediate, ea),
+            Instruction::DB(condition, source, ea) => self.db(bus, condition, source, ea),
             Instruction::ORI(size, source, dest) => self.or(bus, size, source, dest),
+            Instruction::OR(size, source, dest) => self.or(bus, size, source, dest),
+            Instruction::EORI(size, source, dest) => self.eor(bus, size, source, dest),
+            Instruction::EOR(size, source, dest) => self.eor(bus, size, source, dest),
             Instruction::NOP => self.nop(),
-            Instruction::BCC(condition, ea) => self.bcc(bus, condition, ea),
+            Instruction::BCC(size, condition, ea) => self.bcc(bus, size, condition, ea),
             Instruction::BRA(label) => self.bra(bus, label),
             Instruction::LEA(ea, reg) => self.lea(bus, ea, reg),
             Instruction::TST(size, ea) => self.tst(bus, size, ea),
+            Instruction::BTST(size, bit, ea) => self.btst(bus, size, bit, ea),
+            Instruction::BSET(size, bit, ea) => self.btst(bus, size, bit, ea),
             Instruction::MOVE(size, source, dest) => self.move_(bus, size, source, dest),
+            Instruction::MOVEQ(size, source, dest) => self.move_(bus, size, source, dest),
             Instruction::MOVEM(size, source, direction) => self.movem(bus, size, source, direction),
+            Instruction::JMP(label) => self.jmp(bus, label),
+            Instruction::CLR(size, destination) => self.clr(bus, size, destination),
+            Instruction::JSR(ea) => self.jsr(bus, ea),
+            Instruction::RTS => self.rts(bus),
+            Instruction::BSR(label) => self.bsr(bus, label),
+            Instruction::LSLD(size, count, dest) => self.lsl(bus, size, count, dest),
+            Instruction::LSRD(size, count, dest) => self.lsr(bus, size, count, dest),
+            Instruction::LINK(reg, displacement) => {
+                self.link(bus, DataSize::Word, reg, displacement)
+            }
             _ => unimplemented!("{:?}", instruction),
         }
     }
@@ -428,11 +182,11 @@ impl Cpu {
             // LS => , // Lower or Same
             // CS, // Carry Set
             // LT, // Less Than
-            // EQ, // EQual
+            Condition::EQ => self.registers.ccr.contains(ConditionCode::Z), // EQual
             // MI, // MInus
             Condition::F => false, // False (Never true)
             Condition::NE => !self.registers.ccr.contains(ConditionCode::Z), // Not Equal
-            // GE, // Greater than or Equal
+            // Condition::GE, // Greater than or Equal
             // PL, // Plus
             // GT, // Greater Than
             Condition::T => true, // True (always true)
@@ -449,30 +203,8 @@ impl Cpu {
     fn nop(&self) {}
 
     fn bra(&mut self, bus: &mut impl MappedHardware, addressing_mode: AddressingMode) {
-        let label = self.read_addressing_mode(bus, &DataSize::Byte, &addressing_mode);
-        let displacement = match label {
-            Value::Byte(0x00) => {
-                self.read_addressing_mode(bus, &DataSize::Word, &AddressingMode::Immediate)
-            }
-            // Value::Byte(0xff) => self.read_addressing_mode(bus, DataSize::LongWord, AddressingMode::Immediate), // (MC68020, MC68030, MC68040 only)
-            _ => label,
-        };
-        self.registers.displace_pc(displacement);
-    }
-
-    fn bcc(
-        &mut self,
-        bus: &mut impl MappedHardware,
-        condition: Condition,
-        addressing_mode: AddressingMode,
-    ) {
-        // println!("{:?}", addressing_mode);
-        let displacement = self.read_addressing_mode(bus, &DataSize::Byte, &addressing_mode);
-        let cond = self.read_condition_code(condition);
-        if cond {
-            self.registers.displace_pc(displacement)
-        }
-        // panic!("{:?}", label);
+        let before_pc = self.registers.pc();
+        let label = self.read_addressing_mode(bus, &DataSize::Word, &addressing_mode);
         // let displacement = match label {
         //     Value::Byte(0x00) => {
         //         self.read_addressing_mode(bus, &DataSize::Word, &AddressingMode::Immediate)
@@ -480,10 +212,87 @@ impl Cpu {
         //     // Value::Byte(0xff) => self.read_addressing_mode(bus, DataSize::LongWord, AddressingMode::Immediate), // (MC68020, MC68030, MC68040 only)
         //     _ => label,
         // };
-        // panic!("{:?}", displacement);
-        // if self.read_condition_code(condition_code) {
-        // self.registers.displace_pc(displacement);
-        // }
+
+        self.registers.set_pc(before_pc);
+        self.registers.displace_pc(label);
+    }
+
+    fn bcc(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        condition: Condition,
+        addressing_mode: AddressingMode,
+    ) {
+        let displacement = self.read_addressing_mode(bus, &size, &addressing_mode);
+        let cond = self.read_condition_code(condition);
+        if cond {
+            match size {
+                DataSize::Byte => (),
+                DataSize::Word => self.registers.displace_pc(Value::Byte((0 - 2) as u8)),
+                DataSize::LongWord => self.registers.displace_pc(Value::Byte((0 - 4) as u8)),
+            }
+            self.registers.displace_pc(displacement)
+        }
+    }
+
+    fn db(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        condition: Condition,
+        data: AddressingMode,
+        displacement: AddressingMode,
+    ) {
+        let before_pc = self.registers.pc();
+
+        let cond = self.read_condition_code(condition);
+        let data_val: u16 = self
+            .read_addressing_mode(bus, &DataSize::Word, &data)
+            .into();
+        self.immediate = None;
+
+        let label = self.read_addressing_mode(bus, &DataSize::Word, &displacement);
+        self.immediate = None;
+        if !cond {
+            let mut data_val = data_val as i16;
+            data_val -= 1;
+            self.write_addressing_mode(bus, DataSize::Word, data, Value::Word(data_val as u16));
+            if data_val != -1 {
+                self.registers.set_pc(before_pc);
+                self.registers.displace_pc(label);
+            }
+        }
+    }
+
+    fn jmp(&mut self, bus: &mut impl MappedHardware, label: AddressingMode) {
+        let label_data: u32 = read_addressing_mode_address(self, bus, &DataSize::LongWord, &label);
+
+        self.set_pc(label_data);
+    }
+
+    fn jsr(&mut self, bus: &mut impl MappedHardware, label: AddressingMode) {
+        let dest_pc: u32 =
+            read_addressing_mode_address(self, bus, &DataSize::LongWord, &label).into();
+        let next_pc = self.registers.pc();
+        self.push_stack(bus, DataSize::LongWord, Value::LongWord(next_pc));
+        self.set_pc(dest_pc);
+    }
+
+    fn bsr(&mut self, bus: &mut impl MappedHardware, addressing_mode: AddressingMode) {
+        let before_pc = self.registers.pc();
+
+        let label = self.read_addressing_mode(bus, &DataSize::Word, &addressing_mode);
+
+        self.push_stack(bus, DataSize::LongWord, Value::LongWord(before_pc - 2));
+        self.registers.set_pc(before_pc);
+        self.registers.displace_pc(label);
+    }
+
+    fn rts(&mut self, bus: &mut impl MappedHardware) {
+        let sp = self.registers.sp();
+        let new_addr = bus.read_long(sp);
+        self.registers.set_pc(new_addr.unwrap());
+        self.registers.set_sp(sp + 4);
     }
 
     fn add(
@@ -497,7 +306,22 @@ impl Cpu {
         let destination_value = self.read_addressing_mode(bus, &size, &destination);
 
         let (result, flags) = destination_value.add_cc(size, value);
-        // println!("{:?} {:?}= {:?}", destination_value, value, result);
+
+        self.write_addressing_mode(bus, size, destination, result);
+        self.registers.ccr = flags;
+    }
+
+    fn sub(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        value: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let value = self.read_addressing_mode(bus, &size, &value);
+        let destination_value = self.read_addressing_mode(bus, &size, &destination);
+
+        let (result, flags) = destination_value.sub_cc(size, value);
 
         self.write_addressing_mode(bus, size, destination, result);
         self.registers.ccr = flags;
@@ -510,10 +334,38 @@ impl Cpu {
         value: AddressingMode,
         destination: AddressingMode,
     ) {
+        let destination = match destination {
+            AddressingMode::Immediate => AddressingMode::CCR,
+            _ => destination,
+        };
         let value = self.read_addressing_mode(bus, &size, &value);
         let destination_value = self.read_addressing_mode(bus, &size, &destination);
 
         let (result, mut flags) = destination_value.or_cc(size, value);
+
+        self.write_addressing_mode(bus, size, destination, result);
+        flags.set(
+            ConditionCode::X,
+            self.registers.ccr.contains(ConditionCode::X),
+        );
+        self.registers.ccr = flags;
+    }
+
+    fn eor(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        value: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let destination = match destination {
+            AddressingMode::Immediate => AddressingMode::CCR,
+            _ => destination,
+        };
+        let value = self.read_addressing_mode(bus, &size, &value);
+        let destination_value = self.read_addressing_mode(bus, &size, &destination);
+
+        let (result, mut flags) = destination_value.eor_cc(size, value);
 
         self.write_addressing_mode(bus, size, destination, result);
         flags.set(
@@ -529,7 +381,8 @@ impl Cpu {
         addressing_mode: AddressingMode,
         register: AddressingMode,
     ) {
-        let address = self.read_addressing_mode(bus, &DataSize::LongWord, &addressing_mode);
+        let address =
+            read_addressing_mode_address(self, bus, &DataSize::LongWord, &addressing_mode);
         if let AddressingMode::AddressDirect(direct) = register {
             self.registers.set_address(direct, address.into());
         };
@@ -543,6 +396,7 @@ impl Cpu {
         dest: AddressingMode,
     ) {
         let val = self.read_addressing_mode(bus, &size, &source);
+        self.immediate = None;
         self.write_addressing_mode(bus, size, dest, val);
     }
 
@@ -556,6 +410,7 @@ impl Cpu {
         let mask: u16 = self
             .read_addressing_mode(bus, &DataSize::Word, &AddressingMode::Immediate)
             .into();
+        self.immediate = None;
 
         let (address_mask, data_mask) = match source {
             AddressingMode::AddressIndirectPreDecrement(_) => (mask & 0xff, mask >> 8),
@@ -596,8 +451,8 @@ impl Cpu {
     }
 
     fn tst(&mut self, bus: &mut impl MappedHardware, size: DataSize, ea: AddressingMode) {
-        let address = self.read_addressing_mode(bus, &size, &ea);
-        let value = read_memory(bus, size, address);
+        let value = self.read_addressing_mode(bus, &size, &ea);
+        // let value = read_memory(bus, size, address);
 
         self.registers.ccr.remove(ConditionCode::V);
         self.registers.ccr.remove(ConditionCode::C);
@@ -609,6 +464,220 @@ impl Cpu {
             .ccr
             .set(ConditionCode::N, 0i32 > value.into());
     }
+
+    fn btst(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        bit: AddressingMode,
+        ea: AddressingMode,
+    ) {
+        let bit: u32 = self.read_addressing_mode(bus, &size, &bit).into();
+        self.immediate = None;
+        let ea: u32 = self.read_addressing_mode(bus, &size, &ea).into();
+
+        self.registers.ccr.set(ConditionCode::Z, ea & bit == 0);
+    }
+
+    fn bset(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        bit: AddressingMode,
+        ea: AddressingMode,
+    ) {
+        let bit: u32 = self.read_addressing_mode(bus, &size, &bit).into();
+        self.immediate = None;
+        let ea: u32 = self.read_addressing_mode(bus, &size, &ea).into();
+
+        self.registers.ccr.set(ConditionCode::Z, ea & bit == 0);
+    }
+
+    fn clr(&mut self, bus: &mut impl MappedHardware, size: DataSize, destination: AddressingMode) {
+        self.write_addressing_mode(bus, size, destination, Value::from_raw(size, 0));
+
+        self.registers.ccr.set(ConditionCode::N, false);
+        self.registers.ccr.set(ConditionCode::Z, true);
+        self.registers.ccr.set(ConditionCode::V, false);
+        self.registers.ccr.set(ConditionCode::C, false);
+    }
+
+    fn cmp(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        source: AddressingMode,
+        dest: AddressingMode,
+    ) {
+        let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
+        let dest_val: u32 = self.read_addressing_mode(bus, &size, &dest).into();
+        let (result, v) = dest_val.overflowing_sub(val);
+        let result_value = Value::from_raw(size, result);
+        self.registers
+            .ccr
+            .set(ConditionCode::N, is_negative(&size, result_value));
+        self.registers.ccr.set(ConditionCode::Z, result == 0);
+        self.registers.ccr.set(ConditionCode::V, v);
+        self.registers.ccr.set(ConditionCode::C, v);
+    }
+
+    fn link(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        displacement_size: DataSize,
+        reg: AddressingMode,
+        displacement: AddressingMode,
+    ) {
+        let size = DataSize::LongWord;
+        let val = read_addressing_mode_address(self, bus, &size, &reg);
+        self.push_stack(bus, size, Value::LongWord(val));
+        let sp = self.registers.sp();
+        self.write_addressing_mode(bus, size, reg, Value::LongWord(sp));
+        let displacement_val = self.read_addressing_mode(bus, &displacement_size, &displacement);
+        self.registers.displace_sp(displacement_val);
+    }
+
+    fn lsl(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        count: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let count: u32 = match count {
+            AddressingMode::DataDirect(_) => {
+                let c: u32 = self
+                    .read_addressing_mode(bus, &DataSize::LongWord, &count)
+                    .into();
+                c % 64
+            }
+            _ => {
+                let mut c: u32 = self.read_addressing_mode(bus, &size, &count).into();
+                if c == 0 {
+                    c = 8
+                }
+                c
+            }
+        };
+        let dest_val = self.read_addressing_mode(bus, &size, &destination);
+
+        let (result, mut ccr) = shift_left(size, count, dest_val);
+
+        if count == 0 {
+            ccr.set(
+                ConditionCode::X,
+                self.registers.ccr.contains(ConditionCode::X),
+            );
+        }
+
+        self.registers.set_ccr(ccr.bits());
+        self.write_addressing_mode(bus, size, destination, result);
+    }
+
+    fn lsr(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        count: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let count: u32 = match count {
+            AddressingMode::DataDirect(_) => {
+                let c: u32 = self
+                    .read_addressing_mode(bus, &DataSize::LongWord, &count)
+                    .into();
+                c % 64
+            }
+            _ => {
+                let mut c: u32 = self.read_addressing_mode(bus, &size, &count).into();
+                if c == 0 {
+                    c = 8
+                }
+                c
+            }
+        };
+        let dest_val = self.read_addressing_mode(bus, &size, &destination);
+
+        let (result, mut ccr) = shift_right(size, count, dest_val);
+
+        if count == 0 {
+            ccr.set(
+                ConditionCode::X,
+                self.registers.ccr.contains(ConditionCode::X),
+            );
+        }
+
+        self.registers.set_ccr(ccr.bits());
+        self.write_addressing_mode(bus, size, destination, result);
+    }
+}
+
+fn shift_right(size: DataSize, count: u32, value: Value) -> (Value, ConditionCode) {
+    let (result, bit) = match size {
+        DataSize::Byte => {
+            let value: u8 = value.into();
+            let b = (value >> (count - 1)) & 0x1 != 0;
+            (Value::Byte(value >> count), b)
+        }
+        DataSize::Word => {
+            let value: u16 = value.into();
+            let b = (value >> (count - 1)) & 0x1 != 0;
+            (Value::Word(value >> count), b)
+        }
+        DataSize::LongWord => {
+            let value: u32 = value.into();
+            let b = (value >> (count - 1)) & 0x1 != 0;
+            (Value::LongWord(value >> count), b)
+        }
+    };
+
+    let mut ccr = ConditionCode::empty();
+
+    ccr.set(ConditionCode::N, is_negative(&size, result));
+    ccr.set(ConditionCode::Z, is_zero(&size, result));
+    if bit {
+        ccr |= ConditionCode::X;
+        if count > 0 {
+            ccr |= ConditionCode::C;
+        }
+        // ccr |=
+    }
+
+    (result, ccr)
+}
+
+fn shift_left(size: DataSize, count: u32, value: Value) -> (Value, ConditionCode) {
+    let (result, bit) = match size {
+        DataSize::Byte => {
+            let value: u8 = value.into();
+            let b = (value << (count - 1)) & 0x80 != 0;
+            (Value::Byte(value << count), b)
+        }
+        DataSize::Word => {
+            let value: u16 = value.into();
+            let b = (value << (count - 1)) & 0x8000 != 0;
+            (Value::Word(value << count), b)
+        }
+        DataSize::LongWord => {
+            let value: u32 = value.into();
+            let b = (value << (count - 1)) & 0x8000_0000 != 0;
+            (Value::LongWord(value << count), b)
+        }
+    };
+
+    let mut ccr = ConditionCode::empty();
+
+    ccr.set(ConditionCode::N, is_negative(&size, result));
+    ccr.set(ConditionCode::Z, is_zero(&size, result));
+    if bit {
+        ccr |= ConditionCode::X;
+        if count > 0 {
+            ccr |= ConditionCode::C;
+        }
+        // ccr |=
+    }
+
+    (result, ccr)
 }
 
 fn read_memory(bus: &mut impl MappedHardware, size: DataSize, address: Value) -> Value {
@@ -628,4 +697,40 @@ fn is_negative(size: &DataSize, value: Value) -> bool {
         (DataSize::LongWord, Value::LongWord(val)) => (val as i32) < 0,
         _ => unreachable!(),
     }
+}
+
+fn is_zero(size: &DataSize, value: Value) -> bool {
+    match (size, value) {
+        (DataSize::Byte, Value::Byte(val)) => (val as i8) == 0,
+        (DataSize::Word, Value::Word(val)) => (val as i16) == 0,
+        (DataSize::LongWord, Value::LongWord(val)) => (val as i32) == 0,
+        _ => unreachable!(),
+    }
+}
+
+fn test_bit(val: u32, bit: u32) -> bool {
+    let mask = 1 << bit;
+    val & mask == mask
+}
+
+fn set_bit(val: u32, bit: u32) -> u32 {
+    let mask = 1 << bit;
+
+    if val & mask == mask {
+        val | mask
+    } else {
+        val ^ mask
+    }
+}
+
+#[test]
+fn test_test_bit() {
+    assert_eq!(true, test_bit(0b1111_1111, 7));
+    assert_eq!(false, test_bit(0b0111_1111, 7));
+}
+
+fn test_set_bit() {
+    assert_eq!(0b1111_1111, set_bit(0b1111_1111, 7));
+    assert_eq!(0b1111_1111, set_bit(0b0111_1111, 7));
+    assert_eq!(0b0100_0000, set_bit(0b0000_0000, 6));
 }

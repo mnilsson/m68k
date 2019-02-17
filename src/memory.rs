@@ -9,7 +9,7 @@ impl Memory {
     pub fn new(prg: Vec<u8>) -> Memory {
         let memory = Memory {
             prg: prg,
-            memory: vec![0; 0xffff_ffff],
+            memory: vec![0; 0x1_0000_0000],
         };
         memory
     }
@@ -34,12 +34,12 @@ impl MappedHardware for Memory {
         if self.prg.len() > (address + 1) as usize {
             self.prg[address as usize] = hbyte;
             self.prg[(address + 1) as usize] = lbyte;
-            println!("prgwr");
+            // println!("prgwr");
             Some(value)
         } else {
             self.memory[address as usize] = hbyte;
             self.memory[(address + 1) as usize] = lbyte;
-            println!("memwr {:?} {:?}", address, value);
+            // println!("memwr a:{:?} v:{:?}", address, value);
             Some(value)
         }
     }

@@ -9,6 +9,19 @@ pub trait MappedHardware {
         }
     }
 
+    fn write_byte(&mut self, address: u32, value: u8) -> Option<u16> {
+        let dest_word = self.read_word(address);
+        if let Some(dest_word) = dest_word {
+            let value = (value as u16) << 8;
+
+            let dest_word = value | (dest_word & 0xff);
+            self.write_word(address, dest_word);
+            Some(value)
+        } else {
+            None
+        }
+    }
+
     fn read_word(&mut self, address: u32) -> Option<u16>;
 
     fn read_long(&mut self, address: u32) -> Option<u32> {

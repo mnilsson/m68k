@@ -1,6 +1,4 @@
-use addressing_mode::{
-    decode_addressing_mode, AddressingMode, DataSize, DataSizeIdentifier, Value,
-};
+use addressing_mode::{decode_addressing_mode, AddressingMode, DataSize, DataSizeIdentifier};
 use instruction_set::Instruction;
 
 pub fn decode(opcode: usize) -> Instruction {
@@ -60,14 +58,8 @@ pub fn decode(opcode: usize) -> Instruction {
                 ),
 
                 _ => {
-                    let size: DataSize = DataSizeIdentifier::TwoBit(part2 & 0b11).into();
+                    // 0000 0000zz aaaaaa kkkkkkkk kkkkkkkk kifz==lk kifz==lk ori.z   #kz,a
                     match part2 >> 2 {
-                        0b0000 => Instruction::ORI(size, Immediate, part3.into()),
-                        0b0010 => Instruction::ANDI(size, Immediate, part3.into()),
-                        0b0100 => Instruction::SUBI(size, Immediate, part3.into()),
-                        0b0110 => Instruction::ADDI(size, Immediate, part3.into()),
-                        0b1010 => Instruction::EORI(size, Immediate, part3.into()),
-                        0b1100 => Instruction::CMPI(size, Immediate, part3.into()),
                         0b1000 => {
                             let addressing_mode = decode_addressing_mode(part3);
                             let size = match addressing_mode {
@@ -82,7 +74,18 @@ pub fn decode(opcode: usize) -> Instruction {
                                 _ => unreachable!(),
                             }
                         }
-                        _ => unreachable!(),
+                        _ => {
+                            let size: DataSize = DataSizeIdentifier::TwoBit(part2 & 0b11).into();
+                            match part2 >> 2 {
+                                0b0000 => Instruction::ORI(size, Immediate, part3.into()),
+                                0b0010 => Instruction::ANDI(size, Immediate, part3.into()),
+                                0b0100 => Instruction::SUBI(size, Immediate, part3.into()),
+                                0b0110 => Instruction::ADDI(size, Immediate, part3.into()),
+                                0b1010 => Instruction::EORI(size, Immediate, part3.into()),
+                                0b1100 => Instruction::CMPI(size, part3.into()),
+                                _ => unreachable!(),
+                            }
+                        }
                     }
                 }
             }
@@ -109,12 +112,12 @@ pub fn decode(opcode: usize) -> Instruction {
             (_, _) => match part2l >> 2 {
                 0b0 => Instruction::ADDQ(
                     DataSizeIdentifier::TwoBit(part2l & 0b11).into(),
-                    AddressingMode::Value(part2h as Value),
+                    AddressingMode::Value(part2h as u32),
                     part3.into(),
                 ),
                 0b1 => Instruction::SUBQ(
                     DataSizeIdentifier::TwoBit(part2l & 0b11).into(),
-                    AddressingMode::Value(part2h as Value),
+                    AddressingMode::Value(part2h as u32),
                     part3.into(),
                 ),
                 _ => unreachable!(),
@@ -124,21 +127,21 @@ pub fn decode(opcode: usize) -> Instruction {
             // 4 highest bits of part2
             let part2h4 = (part2h << 1) | (part2l >> 2);
             let label = ((part2l & 0b11) << 6) | part3;
-            let address = if label == 0 {
-                AddressingMode::Immediate
+            let (address, size) = if label == 0 {
+                (AddressingMode::Immediate, DataSize::Word)
             } else {
-                AddressingMode::Value(label as Value)
+                (AddressingMode::Value(label as u32), DataSize::Byte)
             };
             match part2h4 {
                 0b0000 => Instruction::BRA(address),
                 0b0001 => Instruction::BSR(address),
-                _ => Instruction::BCC(part2h4.into(), address),
+                _ => Instruction::BCC(size, part2h4.into(), address),
             }
         }
 
         (0b0111, _, _) => Instruction::MOVEQ(
             DataSize::LongWord,
-            AddressingMode::Value(((part2l << 6) | part3) as Value),
+            AddressingMode::Value(((part2l << 6) | part3) as u32),
             AddressingMode::DataDirect(part2h),
         ),
         (0b1000, _, _) => match (part2l, part3h) {
@@ -331,7 +334,7 @@ pub fn decode(opcode: usize) -> Instruction {
                 0b011111 => Instruction::ROLD(size, value, addressing_mode),
                 _ => {
                     let size: DataSize = DataSizeIdentifier::TwoBit(part2l & 0b11).into();
-                    let value = AddressingMode::Value(part2h as Value);
+                    let value = AddressingMode::Value(part2h as u32);
                     let direct = AddressingMode::DataDirect(part2h);
                     let register = AddressingMode::DataDirect(part3l);
                     match part3h {
@@ -416,7 +419,7 @@ fn decode_0100(opcode: usize) -> Instruction {
                 AddressingMode::USP,
                 AddressingMode::AddressDirect(part3l),
             ),
-            (0b111, 0b001, _) => Instruction::TRAP(AddressingMode::Vector(part3 as Value)),
+            (0b111, 0b001, _) => Instruction::TRAP(AddressingMode::Vector(part3 as u32)),
             (0b111, 0b010, _) => Instruction::JSR(part3.into()),
             (0b111, 0b011, _) => Instruction::JMP(part3.into()),
             _ => unreachable!(),

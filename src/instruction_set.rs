@@ -23,7 +23,7 @@ pub enum Instruction {
     SUBI(DataSize, AddressingMode, AddressingMode),
     ADDI(DataSize, AddressingMode, AddressingMode),
     EORI(DataSize, AddressingMode, AddressingMode),
-    CMPI(DataSize, AddressingMode, AddressingMode),
+    CMPI(DataSize, AddressingMode),
 
     BTST(DataSize, AddressingMode, AddressingMode),
     BCHG(DataSize, AddressingMode, AddressingMode),
@@ -50,7 +50,7 @@ pub enum Instruction {
 
     BRA(AddressingMode),
     BSR(AddressingMode),
-    BCC(Condition, AddressingMode),
+    BCC(DataSize, Condition, AddressingMode),
     MOVEQ(DataSize, AddressingMode, AddressingMode),
 
     CMP(DataSize, AddressingMode, AddressingMode),
