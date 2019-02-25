@@ -43,7 +43,7 @@ pub struct Registers {
     isp: u32, // interrupt stack pointer
     msp: u32, // master stack pointer
 
-    system_status_register: SupervisorStatusRegister,
+    pub system_status_register: SupervisorStatusRegister,
 }
 use std::fmt;
 
@@ -56,7 +56,11 @@ impl fmt::Debug for Registers {
             write!(f, "a{}:{:08X} ", i + 1, self.a[i]);
         }
 
-        write!(f, "pc: {:08X} ccr: {:?}, sr: {:?}", self.pc, self.ccr, self.system_status_register);
+        write!(
+            f,
+            "pc: {:08X} ccr: {:?}, sr: {:?}",
+            self.pc, self.ccr, self.system_status_register
+        );
         write!(f, "")
     }
 }
@@ -146,6 +150,17 @@ impl Registers {
         self.save_current_stack_pointer();
         self.ccr = ConditionCode::from_bits(value.into()).unwrap();
         self.apply_stack_pointer();
+    }
+
+    pub fn complete_ccr(&self) -> u16 {
+        (self.system_status_register.bits() as u16) << 8 | self.ccr.bits() as u16
+    }
+
+    pub fn set_complete_ccr(&mut self, value: u16) {
+        let ssr = value >> 8;
+        let ccr = value & 0xff;
+        self.system_status_register = SupervisorStatusRegister::from_bits_truncate(ssr as u8);
+        self.ccr = ConditionCode::from_bits_truncate(value as u8);
     }
 
     pub fn sr(&self) -> u16 {

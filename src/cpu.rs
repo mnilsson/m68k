@@ -5,7 +5,7 @@ use addressing_mode::{
 use decoder::decode;
 use instruction_set::Instruction;
 use mapped_hardware::MappedHardware;
-use registers::{ConditionCode, Registers};
+use registers::{ConditionCode, Registers, SupervisorStatusRegister};
 
 use std::ops::Add;
 use value::Value;
@@ -38,6 +38,8 @@ pub struct Cpu {
     instruction_clock: usize,
 
     immediate: Option<Value>,
+
+    interrupt_requests: Vec<(usize, Option<usize>)>, // (level, Option<address>)
 }
 
 impl Cpu {
@@ -62,7 +64,45 @@ impl Cpu {
         self.registers.set_sp(new_pc);
     }
 
+    pub fn request_auto_interrupt(&mut self, interrupt: usize) {
+        self.interrupt_requests.push((interrupt, None))
+    }
+
+    pub fn request_interrupt(&mut self, interrupt: usize, address: usize) {
+        self.interrupt_requests.push((interrupt, Some(address)))
+    }
+
+    fn run_interrupt(&mut self, bus: &mut impl MappedHardware) {
+        if self.interrupt_requests.is_empty() {
+            return;
+        }
+
+        let (irqlevel, address) = self.interrupt_requests[0];
+        let address = match address {
+            None => {
+                let intermediate = (irqlevel * 4) + 60;
+                bus.read_long(intermediate as u32).unwrap() as usize
+            }
+            Some(address) => address + 0,
+        };
+
+        let pc = self.registers.pc();
+        self.push_stack(bus, DataSize::LongWord, Value::LongWord(pc));
+        let ccr = self.registers.complete_ccr();
+        self.push_stack(bus, DataSize::Word, Value::Word(ccr));
+
+        if irqlevel + 0 <= 7 {
+            let bits = self.registers.system_status_register.bits() & 0xf8;
+            self.registers.system_status_register =
+                SupervisorStatusRegister::from_bits_truncate(bits | (irqlevel + 0) as u8);
+        }
+
+        self.interrupt_requests.remove(0);
+        self.set_pc(address as u32)
+    }
+
     pub fn execute_next_instruction(&mut self, bus: &mut impl MappedHardware) {
+        self.run_interrupt(bus);
         self.immediate = None;
         let pc = self.registers.pc();
         let op = bus.read_word(self.registers.pc()).unwrap();
