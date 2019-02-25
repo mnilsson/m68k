@@ -1,3 +1,4 @@
+use crate::test_bit;
 use cpu::Cpu;
 use mapped_hardware::MappedHardware;
 use registers::ConditionCode;
@@ -195,6 +196,52 @@ pub fn read_addressing_mode_address(
 
             addr
         }
+        AddressingMode::AddressIndirectIndexedAndDisplacement(ref reg) => {
+            let reg_addr = cpu.registers.address(*reg);
+
+            let extension_word: u16 = cpu.read_immediate(bus, &DataSize::Word).into();
+            let reg = extension_word >> 12 & 0b111;
+            let index_value = match extension_word & 0x8000 {
+                0b0 => cpu.registers.data(reg as usize),
+                _ => cpu.registers.address(reg as usize),
+                // _ => unreachable!("Not implemented"),
+            };
+
+            let index_size = match test_bit(extension_word.into(), 11) {
+                true => DataSize::Word,
+                false => DataSize::LongWord,
+            };
+
+            let scale = match (extension_word >> 8) & 0b11 {
+                0b00 => 1,
+                0b01 => 2,
+                0b10 => 4,
+                0b11 => 8,
+                _ => unreachable!(),
+            };
+
+            if test_bit(extension_word.into(), 8) {
+                let base_register_supress = test_bit(extension_word.into(), 7);
+                let index_supress = test_bit(extension_word.into(), 6);
+
+                // 00 => reserved
+                // 01 => null displacement
+                // 10 => word
+                // 11 => long
+                let base_displacement_size = (extension_word >> 4) & 0b11;
+
+                match (index_supress, extension_word & 0b111) {
+                    (_, 0b000) => (), // no memory indirect action,
+                    (_, _) => unreachable!("check section 2.2 in 68kpm"),
+                }
+
+                unreachable!()
+            } else {
+                let displacement = (extension_word & 0xff) as u32;
+
+                reg_addr + displacement + index_value * scale
+            }
+        }
         AddressingMode::PCIndirectDisplacementMode => {
             let pc = cpu.registers.pc();
             let ext: u32 = cpu.read_immediate(bus, &DataSize::Word).into();
@@ -283,6 +330,14 @@ pub fn read_addressing_mode(
             }
         }
         AddressingMode::AddressIndirectDisplacement(ref reg) => {
+            let addr = read_addressing_mode_address(cpu, bus, size, addressing_mode);
+            match size {
+                DataSize::Byte => bus.read_byte(addr).into(),
+                DataSize::Word => bus.read_word(addr).into(),
+                DataSize::LongWord => bus.read_long(addr).into(),
+            }
+        }
+        AddressingMode::AddressIndirectIndexedAndDisplacement(ref reg) => {
             let addr = read_addressing_mode_address(cpu, bus, size, addressing_mode);
             match size {
                 DataSize::Byte => bus.read_byte(addr).into(),
@@ -392,10 +447,25 @@ pub fn write_addressing_mode(
                 }
             }
         }
+        AddressingMode::AddressIndirectIndexedAndDisplacement(ref reg) => {
+            let addr = read_addressing_mode_address(cpu, bus, &size, &addressing_mode);
+            match size {
+                DataSize::Byte => {
+                    bus.write_byte(addr, value.into());
+                }
+                DataSize::Word => {
+                    bus.write_word(addr, value.into());
+                }
+                DataSize::LongWord => {
+                    bus.write_long(addr, value.into());
+                }
+            }
+        }
         AddressingMode::SR => cpu.registers.set_ccr(value.into()),
         AddressingMode::USP => cpu.registers.set_usp(value.into()),
         AddressingMode::AbsoluteAddress(addr_size) => {
             let address = cpu.read_immediate(bus, &addr_size).into();
+            // let a: u32 = address;
             match size {
                 DataSize::Byte => {
                     bus.write_byte(address, value.into());
