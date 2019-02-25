@@ -147,6 +147,11 @@ impl Cpu {
 
     fn push_stack(&mut self, bus: &mut impl MappedHardware, size: DataSize, value: Value) {
         match size {
+            DataSize::Word => {
+                let sp = self.registers.sp();
+                self.registers.set_sp(sp - 2);
+                bus.write_word(self.registers.sp(), value.into());
+            }
             DataSize::LongWord => {
                 let sp = self.registers.sp();
                 self.registers.set_sp(sp - 4);
@@ -184,7 +189,8 @@ impl Cpu {
             Instruction::SUBQ(size, value, dest) => self.sub(bus, size, value, dest),
             Instruction::SUB(size, value, dest) => self.sub(bus, size, value, dest),
             Instruction::ADDI(size, value, dest) => self.add(bus, size, value, dest),
-            Instruction::ANDI(size, source, dest) => self.andi(bus, size, source, dest),
+            Instruction::AND(size, source, dest) => self.and(bus, size, source, dest),
+            Instruction::ANDI(size, source, dest) => self.and(bus, size, source, dest),
             Instruction::CMP(size, source, dest) => self.cmp(bus, size, source, dest),
             Instruction::CMPI(size, ea) => self.cmp(bus, size, AddressingMode::Immediate, ea),
             Instruction::DB(condition, source, ea) => self.db(bus, condition, source, ea),
@@ -206,12 +212,14 @@ impl Cpu {
             Instruction::CLR(size, destination) => self.clr(bus, size, destination),
             Instruction::JSR(ea) => self.jsr(bus, ea),
             Instruction::RTS => self.rts(bus),
+            Instruction::RTE => self.rte(bus),
             Instruction::BSR(label) => self.bsr(bus, label),
             Instruction::LSLD(size, count, dest) => self.lsl(bus, size, count, dest),
             Instruction::LSRD(size, count, dest) => self.lsr(bus, size, count, dest),
             Instruction::LINK(reg, displacement) => {
                 self.link(bus, DataSize::Word, reg, displacement)
             }
+            Instruction::PEA(ea) => self.pea(bus, ea),
             _ => unimplemented!("{:?}", instruction),
         }
     }
@@ -219,7 +227,10 @@ impl Cpu {
     fn read_condition_code(&mut self, condition_code: Condition) -> bool {
         match condition_code {
             Condition::CC => !self.registers.ccr.contains(ConditionCode::C), // Carry Clear
-            // LS => , // Lower or Same
+            LS => {
+                self.registers.ccr.contains(ConditionCode::N)
+                    || self.registers.ccr.contains(ConditionCode::Z)
+            } // Lower or Same
             // CS, // Carry Set
             // LT, // Less Than
             Condition::EQ => self.registers.ccr.contains(ConditionCode::Z), // EQual
@@ -234,7 +245,7 @@ impl Cpu {
             // VC, // oVerflow Clear
             // LE, // Less than or Equal
             // VS, // oVerflow Set
-            _ => unimplemented!(),
+            _ => unimplemented!("{:?}", condition_code),
         }
     }
 
@@ -329,6 +340,18 @@ impl Cpu {
     }
 
     fn rts(&mut self, bus: &mut impl MappedHardware) {
+        let sp = self.registers.sp();
+        let new_addr = bus.read_long(sp);
+        self.registers.set_pc(new_addr.unwrap());
+        self.registers.set_sp(sp + 4);
+    }
+
+    fn rte(&mut self, bus: &mut impl MappedHardware) {
+        let sp = self.registers.sp();
+        let new_addr = bus.read_word(sp);
+        self.registers.set_complete_ccr(new_addr.unwrap());
+        self.registers.set_sp(sp + 2);
+
         let sp = self.registers.sp();
         let new_addr = bus.read_long(sp);
         self.registers.set_pc(new_addr.unwrap());
@@ -471,7 +494,7 @@ impl Cpu {
         }
     }
 
-    fn andi(
+    fn and(
         &mut self,
         bus: &mut impl MappedHardware,
         size: DataSize,
@@ -575,6 +598,11 @@ impl Cpu {
         self.write_addressing_mode(bus, size, reg, Value::LongWord(sp));
         let displacement_val = self.read_addressing_mode(bus, &displacement_size, &displacement);
         self.registers.displace_sp(displacement_val);
+    }
+
+    fn pea(&mut self, bus: &mut impl MappedHardware, ea: AddressingMode) {
+        let val = read_addressing_mode_address(self, bus, &DataSize::LongWord, &ea);
+        self.push_stack(bus, DataSize::LongWord, Value::LongWord(val));
     }
 
     fn lsl(
