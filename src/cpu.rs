@@ -40,6 +40,7 @@ pub struct Cpu {
     immediate: Option<Value>,
 
     interrupt_requests: Vec<(usize, Option<usize>)>, // (level, Option<address>)
+    stopped: bool,
     pub debug: bool,
 }
 
@@ -100,6 +101,7 @@ impl Cpu {
 
         self.interrupt_requests.remove(0);
         self.set_pc(address as u32)
+        self.stopped = false;
     }
 
     pub fn execute_next_instruction(&mut self, bus: &mut impl MappedHardware) {
@@ -107,6 +109,11 @@ impl Cpu {
         self.immediate = None;
         let pc = self.registers.pc();
         let op = bus.read_word(self.registers.pc()).unwrap();
+
+        if self.stopped {
+            return;
+        }
+
         self.registers.pc_increment();
         self.registers.pc_increment();
         let instr = decode(op as usize);
@@ -213,6 +220,7 @@ impl Cpu {
                 self.link(bus, DataSize::Word, reg, displacement)
             }
             Instruction::PEA(ea) => self.pea(bus, ea),
+            Instruction::STOP(ccr) => self.stop(bus, ccr),
             _ => unimplemented!("{:?}", instruction),
         }
     }
@@ -245,6 +253,18 @@ impl Cpu {
     //// Instruction impls
 
     fn nop(&self) {}
+
+    fn stop(&mut self, bus: &mut impl MappedHardware, ccr: AddressingMode) {
+        let ccr: u16 = self.read_addressing_mode(bus, &DataSize::Word, &ccr).into();
+        if self
+            .registers
+            .system_status_register
+            .contains(SupervisorStatusRegister::S)
+        {
+            self.registers.set_complete_ccr(ccr);
+        }
+        self.stopped = true;
+    }
 
     fn bra(&mut self, bus: &mut impl MappedHardware, addressing_mode: AddressingMode) {
         let before_pc = self.registers.pc();
