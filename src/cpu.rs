@@ -40,6 +40,7 @@ pub struct Cpu {
     immediate: Option<Value>,
 
     interrupt_requests: Vec<(usize, Option<usize>)>, // (level, Option<address>)
+    pub debug: bool,
 }
 
 impl Cpu {
@@ -110,17 +111,9 @@ impl Cpu {
         self.registers.pc_increment();
         let instr = decode(op as usize);
         let instr2 = decode(op as usize);
-        // match instr {
-        //     Instruction::MOVE(_, _, _) => {
-        //         println!("{:04X} {:04X} {:?} {:?}", pc, op, self.registers, instr2);
-        //     }
-        //     _ => (),
-        // }
-        // if op != 0 && pc != 0x264 && pc != 0x266 {
-        println!("{:04X} {:04X} {:?} {:?}", pc, op, self.registers, instr2);
-        // }
-        // panic!();
-
+        if self.debug {
+            println!("{:04X} {:04X} {:?} {:?}", pc, op, self.registers, instr2);
+        }
         self.execute_instruction(bus, instr);
     }
 
