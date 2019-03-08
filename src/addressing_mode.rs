@@ -361,11 +361,11 @@ pub fn read_addressing_mode(
 pub fn write_addressing_mode(
     cpu: &mut Cpu,
     bus: &mut impl MappedHardware,
-    size: DataSize,
-    addressing_mode: AddressingMode,
+    size: &DataSize,
+    addressing_mode: &AddressingMode,
     value: Value,
 ) {
-    match addressing_mode {
+    match *addressing_mode {
         AddressingMode::DataDirect(reg) => {
             let current: u32 = cpu.registers.data(reg);
             let current = match size {

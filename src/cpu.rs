@@ -173,8 +173,8 @@ impl Cpu {
     fn write_addressing_mode(
         &mut self,
         bus: &mut impl MappedHardware,
-        size: DataSize,
-        addressing_mode: AddressingMode,
+        size: &DataSize,
+        addressing_mode: &AddressingMode,
         value: Value,
     ) {
         write_addressing_mode(self, bus, size, addressing_mode, value)
@@ -277,6 +277,7 @@ impl Cpu {
         //     _ => label,
         // };
 
+        let label = self.read_addressing_mode(bus, &size, &addressing_mode);
         self.registers.set_pc(before_pc);
         self.registers.displace_pc(label);
     }
@@ -320,7 +321,7 @@ impl Cpu {
         if !cond {
             let mut data_val = data_val as i16;
             data_val -= 1;
-            self.write_addressing_mode(bus, DataSize::Word, data, Value::Word(data_val as u16));
+            self.write_addressing_mode(bus, &DataSize::Word, &data, Value::Word(data_val as u16));
             if data_val != -1 {
                 self.registers.set_pc(before_pc);
                 self.registers.displace_pc(label);
@@ -383,7 +384,7 @@ impl Cpu {
 
         let (result, flags) = destination_value.add_cc(size, value);
 
-        self.write_addressing_mode(bus, size, destination, result);
+        self.write_addressing_mode(bus, &size, &destination, result);
         self.registers.ccr = flags;
     }
 
@@ -399,7 +400,7 @@ impl Cpu {
 
         let (result, flags) = destination_value.sub_cc(size, value);
 
-        self.write_addressing_mode(bus, size, destination, result);
+        self.write_addressing_mode(bus, &size, &destination, result);
         self.registers.ccr = flags;
     }
 
@@ -419,7 +420,7 @@ impl Cpu {
 
         let (result, mut flags) = destination_value.or_cc(size, value);
 
-        self.write_addressing_mode(bus, size, destination, result);
+        self.write_addressing_mode(bus, &size, &destination, result);
         flags.set(
             ConditionCode::X,
             self.registers.ccr.contains(ConditionCode::X),
@@ -443,7 +444,7 @@ impl Cpu {
 
         let (result, mut flags) = destination_value.eor_cc(size, value);
 
-        self.write_addressing_mode(bus, size, destination, result);
+        self.write_addressing_mode(bus, &size, &destination, result);
         flags.set(
             ConditionCode::X,
             self.registers.ccr.contains(ConditionCode::X),
@@ -473,7 +474,7 @@ impl Cpu {
     ) {
         let val = self.read_addressing_mode(bus, &size, &source);
         self.immediate = None;
-        self.write_addressing_mode(bus, size, dest, val);
+        self.write_addressing_mode(bus, &size, &dest, val);
     }
 
     fn movem(
@@ -523,7 +524,7 @@ impl Cpu {
             .set(ConditionCode::N, is_negative(&size, result_value));
         self.registers.ccr.remove(ConditionCode::V);
         self.registers.ccr.remove(ConditionCode::C);
-        self.write_addressing_mode(bus, size, dest, result_value.into());
+        self.write_addressing_mode(bus, &size, &dest, result_value.into());
     }
 
     fn tst(&mut self, bus: &mut impl MappedHardware, size: DataSize, ea: AddressingMode) {
@@ -570,7 +571,7 @@ impl Cpu {
     }
 
     fn clr(&mut self, bus: &mut impl MappedHardware, size: DataSize, destination: AddressingMode) {
-        self.write_addressing_mode(bus, size, destination, Value::from_raw(size, 0));
+        self.write_addressing_mode(bus, &size, &destination, Value::from_raw(size, 0));
 
         self.registers.ccr.set(ConditionCode::N, false);
         self.registers.ccr.set(ConditionCode::Z, true);
@@ -608,7 +609,7 @@ impl Cpu {
         let val = read_addressing_mode_address(self, bus, &size, &reg);
         self.push_stack(bus, size, Value::LongWord(val));
         let sp = self.registers.sp();
-        self.write_addressing_mode(bus, size, reg, Value::LongWord(sp));
+        self.write_addressing_mode(bus, &size, &reg, Value::LongWord(sp));
         let displacement_val = self.read_addressing_mode(bus, &displacement_size, &displacement);
         self.registers.displace_sp(displacement_val);
     }
@@ -652,7 +653,7 @@ impl Cpu {
         }
 
         self.registers.set_ccr(ccr.bits());
-        self.write_addressing_mode(bus, size, destination, result);
+        self.write_addressing_mode(bus, &size, &destination, result);
     }
 
     fn lsr(
@@ -689,7 +690,7 @@ impl Cpu {
         }
 
         self.registers.set_ccr(ccr.bits());
-        self.write_addressing_mode(bus, size, destination, result);
+        self.write_addressing_mode(bus, &size, &destination, result);
     }
 }
 
