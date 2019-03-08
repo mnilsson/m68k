@@ -100,7 +100,7 @@ impl Cpu {
         }
 
         self.interrupt_requests.remove(0);
-        self.set_pc(address as u32)
+        self.set_pc(address as u32);
         self.stopped = false;
     }
 
@@ -204,7 +204,7 @@ impl Cpu {
             Instruction::LEA(ea, reg) => self.lea(bus, ea, reg),
             Instruction::TST(size, ea) => self.tst(bus, size, ea),
             Instruction::BTST(size, bit, ea) => self.btst(bus, size, bit, ea),
-            Instruction::BSET(size, bit, ea) => self.btst(bus, size, bit, ea),
+            // Instruction::BSET(size, bit, ea) => self.bset(bus, size, bit, ea),
             Instruction::MOVE(size, source, dest) => self.move_(bus, size, source, dest),
             Instruction::MOVEQ(size, source, dest) => self.move_(bus, size, source, dest),
             Instruction::MOVEM(size, source, direction) => self.movem(bus, size, source, direction),
@@ -216,11 +216,17 @@ impl Cpu {
             Instruction::BSR(label) => self.bsr(bus, label),
             Instruction::LSLD(size, count, dest) => self.lsl(bus, size, count, dest),
             Instruction::LSRD(size, count, dest) => self.lsr(bus, size, count, dest),
+            Instruction::ASLD(size, count, dest) => self.asl(bus, size, count, dest),
+            Instruction::ASRD(size, count, dest) => self.asr(bus, size, count, dest),
+            Instruction::RORD(size, count, dest) => self.ror(bus, size, count, dest),
+            Instruction::ROLD(size, count, dest) => self.rol(bus, size, count, dest),
             Instruction::LINK(reg, displacement) => {
                 self.link(bus, DataSize::Word, reg, displacement)
             }
             Instruction::PEA(ea) => self.pea(bus, ea),
             Instruction::STOP(ccr) => self.stop(bus, ccr),
+            Instruction::SWAP(DataSize::Word, AddressingMode::DataDirect(reg)) => self.swap(reg),
+            Instruction::NOT(size, ea) => self.not(bus, size, ea),
             _ => unimplemented!("{:?}", instruction),
         }
     }
@@ -268,14 +274,10 @@ impl Cpu {
 
     fn bra(&mut self, bus: &mut impl MappedHardware, addressing_mode: AddressingMode) {
         let before_pc = self.registers.pc();
-        let label = self.read_addressing_mode(bus, &DataSize::Word, &addressing_mode);
-        // let displacement = match label {
-        //     Value::Byte(0x00) => {
-        //         self.read_addressing_mode(bus, &DataSize::Word, &AddressingMode::Immediate)
-        //     }
-        //     // Value::Byte(0xff) => self.read_addressing_mode(bus, DataSize::LongWord, AddressingMode::Immediate), // (MC68020, MC68030, MC68040 only)
-        //     _ => label,
-        // };
+        let size = match addressing_mode {
+            AddressingMode::Value(_) => DataSize::Byte,
+            _ => DataSize::Word,
+        };
 
         let label = self.read_addressing_mode(bus, &size, &addressing_mode);
         self.registers.set_pc(before_pc);
@@ -489,23 +491,89 @@ impl Cpu {
             .into();
         self.immediate = None;
 
-        let (address_mask, data_mask) = match source {
-            AddressingMode::AddressIndirectPreDecrement(_) => (mask & 0xff, mask >> 8),
-            _ => (mask >> 8, mask & 0xff),
-        };
+        match source {
+            AddressingMode::AddressIndirectPreDecrement(_) => {
+                let (address_mask, data_mask) = (((mask & 0xff) as u8), ((mask >> 8) as u8));
 
-        for i in 0..8 {
-            if data_mask & (1 << i) != 0 {
-                let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
-                self.registers.set_data(i, val);
+                for i in (0..8).rev() {
+                    if address_mask & (1 << i) != 0 {
+                        if direction == 1 {
+                            let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
+                            self.registers.set_address(i, val);
+                        } else {
+                            let val = self.registers.address(i);
+
+                            // println!("r2m {} {:X}", i, val);
+                            self.write_addressing_mode(
+                                bus,
+                                &size,
+                                &source,
+                                Value::from_raw(size, val),
+                            )
+                        }
+                    }
+                }
+
+                for i in (0..8).rev() {
+                    if data_mask & (1 << i) != 0 {
+                        if direction == 1 {
+                            let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
+                            self.registers.set_data(i, val);
+                        // self.registers.set_address(i, val);
+                        } else {
+                            let val = self.registers.data(i);
+                            self.write_addressing_mode(
+                                bus,
+                                &size,
+                                &source,
+                                Value::from_raw(size, val),
+                            );
+                            // self.write_addressing_mode(bus, &size, &source, Value::from_raw(size, val));
+                        }
+                    }
+                }
             }
-        }
-        for i in 0..8 {
-            if address_mask & (1 << i) != 0 {
-                let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
-                self.registers.set_address(i, val);
+            _ => {
+                let (address_mask, data_mask) = ((mask >> 8) as u8, (mask & 0xff) as u8);
+
+                for i in 0..8 {
+                    if data_mask & (1 << i) != 0 {
+                        if direction == 1 {
+                            let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
+                            self.registers.set_data(i, val);
+                        // self.registers.set_address(i, val);
+                        } else {
+                            let val = self.registers.data(i);
+                            self.write_addressing_mode(
+                                bus,
+                                &size,
+                                &source,
+                                Value::from_raw(size, val),
+                            );
+                            // self.write_addressing_mode(bus, &size, &source, Value::from_raw(size, val));
+                        }
+                    }
+                }
+                for i in 0..8 {
+                    if address_mask & (1 << i) != 0 {
+                        if direction == 1 {
+                            let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
+                            self.registers.set_address(i, val);
+                        // println!("m2r {} {:X}", i, val);
+                        } else {
+                            let val = self.registers.address(i);
+
+                            self.write_addressing_mode(
+                                bus,
+                                &size,
+                                &source,
+                                Value::from_raw(size, val),
+                            )
+                        }
+                    }
+                }
             }
-        }
+        };
     }
 
     fn and(
@@ -553,7 +621,9 @@ impl Cpu {
         self.immediate = None;
         let ea: u32 = self.read_addressing_mode(bus, &size, &ea).into();
 
-        self.registers.ccr.set(ConditionCode::Z, ea & bit == 0);
+        self.registers
+            .ccr
+            .set(ConditionCode::Z, ea & (1 << bit) == 0);
     }
 
     fn bset(
@@ -587,6 +657,7 @@ impl Cpu {
         dest: AddressingMode,
     ) {
         let val: u32 = self.read_addressing_mode(bus, &size, &source).into();
+        self.immediate = None;
         let dest_val: u32 = self.read_addressing_mode(bus, &size, &dest).into();
         let (result, v) = dest_val.overflowing_sub(val);
         let result_value = Value::from_raw(size, result);
@@ -617,6 +688,35 @@ impl Cpu {
     fn pea(&mut self, bus: &mut impl MappedHardware, ea: AddressingMode) {
         let val = read_addressing_mode_address(self, bus, &DataSize::LongWord, &ea);
         self.push_stack(bus, DataSize::LongWord, Value::LongWord(val));
+    }
+
+    fn swap(&mut self, register: usize) {
+        let val = self.registers.data(register);
+        let h = (val & 0xffff_0000) >> 16;
+        let l = val & 0xffff;
+        let new_val = (l << 16) | h;
+        self.registers.ccr.set(ConditionCode::Z, new_val == 0);
+        self.registers
+            .ccr
+            .set(ConditionCode::N, new_val & 0x8000_0000 != 0);
+        self.registers.ccr.remove(ConditionCode::V);
+        self.registers.ccr.remove(ConditionCode::C);
+        self.registers.set_data(register, new_val);
+    }
+
+    fn not(&mut self, bus: &mut impl MappedHardware, size: DataSize, ea: AddressingMode) {
+        let val: u32 = self.read_addressing_mode(bus, &size, &ea).into();
+
+        let val = Value::from_raw(size, !val);
+        self.registers
+            .ccr
+            .set(ConditionCode::Z, is_zero(&size, val));
+        self.registers
+            .ccr
+            .set(ConditionCode::N, is_negative(&size, val));
+        self.registers.ccr.remove(ConditionCode::V);
+        self.registers.ccr.remove(ConditionCode::C);
+        self.write_addressing_mode(bus, &size, &ea, val);
     }
 
     fn lsl(
@@ -692,6 +792,230 @@ impl Cpu {
         self.registers.set_ccr(ccr.bits());
         self.write_addressing_mode(bus, &size, &destination, result);
     }
+
+    fn asl(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        count: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let count: u32 = match count {
+            AddressingMode::DataDirect(_) => {
+                let c: u32 = self
+                    .read_addressing_mode(bus, &DataSize::LongWord, &count)
+                    .into();
+                c % 64
+            }
+            _ => {
+                let mut c: u32 = self.read_addressing_mode(bus, &size, &count).into();
+                if c == 0 {
+                    c = 8
+                }
+                c
+            }
+        };
+        let dest_val = self.read_addressing_mode(bus, &size, &destination);
+
+        let msb = match size {
+            DataSize::Byte => {
+                let v: u8 = dest_val.into();
+                v & 0x80 != 0
+            }
+            DataSize::Word => {
+                let v: u16 = dest_val.into();
+                v & 0x8000 != 0
+            }
+            DataSize::LongWord => {
+                let v: u32 = dest_val.into();
+                v & 0x8000_0000 != 0
+            }
+        };
+
+        let (result, mut ccr) = shift_left(size, count, dest_val);
+
+        let mut val: u32 = result.into();
+
+        if count == 0 {
+            ccr.set(
+                ConditionCode::X,
+                self.registers.ccr.contains(ConditionCode::X),
+            );
+        }
+
+        self.registers.set_ccr(ccr.bits());
+        self.write_addressing_mode(bus, &size, &destination, Value::from_raw(size, val));
+    }
+
+    fn asr(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        count: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let count: u32 = match count {
+            AddressingMode::DataDirect(_) => {
+                let c: u32 = self
+                    .read_addressing_mode(bus, &DataSize::LongWord, &count)
+                    .into();
+                c % 64
+            }
+            _ => {
+                let mut c: u32 = self.read_addressing_mode(bus, &size, &count).into();
+                if c == 0 {
+                    c = 8
+                }
+                c
+            }
+        };
+        let mut dest_val = self.read_addressing_mode(bus, &size, &destination);
+        let pre_msb = is_negative(&size, dest_val);
+        let mut bit = 0;
+        for i in 0..count {
+            let msb = match size {
+                DataSize::Byte => {
+                    let mut v: u8 = dest_val.into();
+                    let msb = v & 0x80;
+                    bit = (v & 0b1) as u8;
+                    v = v >> 1;
+                    v &= msb;
+                    dest_val = Value::from_raw(size, v as u32)
+                }
+                DataSize::Word => {
+                    let mut v: u16 = dest_val.into();
+                    let msb = v & 0x8000;
+                    bit = (v & 0b1) as u8;
+                    v = v >> 1;
+                    v &= msb;
+                    dest_val = Value::from_raw(size, v as u32)
+                }
+                DataSize::LongWord => {
+                    let mut v: u32 = dest_val.into();
+                    let msb = v & 0x8000_0000;
+                    bit = (v & 0b1) as u8;
+                    v = v >> 1;
+                    v &= msb;
+                    dest_val = Value::from_raw(size, v as u32)
+                }
+            };
+        }
+
+        if count != 0 {
+            self.registers.ccr.set(ConditionCode::X, bit == 1);
+        }
+        self.registers.ccr.set(ConditionCode::C, bit == 1);
+        self.registers
+            .ccr
+            .set(ConditionCode::N, is_negative(&size, dest_val));
+        self.registers
+            .ccr
+            .set(ConditionCode::Z, is_zero(&size, dest_val));
+        self.registers
+            .ccr
+            .set(ConditionCode::V, pre_msb != is_negative(&size, dest_val));
+
+        self.write_addressing_mode(bus, &size, &destination, dest_val);
+    }
+
+    fn rol(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        count: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let (res, ccr) = rotate(self, bus, size, count, &destination, true);
+        self.write_addressing_mode(bus, &size, &destination, res);
+        self.registers.set_ccr(ccr.bits());
+    }
+
+    fn ror(
+        &mut self,
+        bus: &mut impl MappedHardware,
+        size: DataSize,
+        count: AddressingMode,
+        destination: AddressingMode,
+    ) {
+        let (res, ccr) = rotate(self, bus, size, count, &destination, false);
+        self.write_addressing_mode(bus, &size, &destination, res);
+        self.registers.set_ccr(ccr.bits());
+    }
+}
+
+fn rotate(
+    cpu: &mut Cpu,
+    bus: &mut impl MappedHardware,
+    size: DataSize,
+    count: AddressingMode,
+    destination: &AddressingMode,
+    rotate_left: bool,
+) -> (Value, ConditionCode) {
+    let count: u32 = match count {
+        AddressingMode::DataDirect(_) => {
+            let c: u32 = read_addressing_mode(cpu, bus, &DataSize::LongWord, &count).into();
+            c % 64
+        }
+        _ => {
+            let mut c: u32 = read_addressing_mode(cpu, bus, &size, &count).into();
+            if c == 0 {
+                c = 8
+            }
+            c
+        }
+    };
+
+    cpu.immediate = None;
+    let value = read_addressing_mode(cpu, bus, &size, &destination);
+    let (result, bit) = match size {
+        DataSize::Byte => {
+            let mut value: u8 = value.into();
+            if rotate_left {
+                value = value.rotate_left(count);
+                (Value::Byte(value), value & 0b1 == 0b1)
+            } else {
+                value = value.rotate_right(count);
+                (Value::Byte(value), value & 0x80 == 0x80)
+            }
+        }
+        DataSize::Word => {
+            let mut value: u16 = value.into();
+            if rotate_left {
+                value = value.rotate_left(count);
+                (Value::Word(value), value & 0b1 == 0b1)
+            } else {
+                value = value.rotate_right(count);
+                (Value::Word(value), value & 0x8000 == 0x8000)
+            }
+        }
+        DataSize::LongWord => {
+            let mut value: u32 = value.into();
+            if rotate_left {
+                value = value.rotate_left(count);
+                (Value::LongWord(value), value & 0b1 == 0b1)
+            } else {
+                value = value.rotate_right(count);
+                (Value::LongWord(value), value & 0x8000_0000 == 0x8000_0000)
+            }
+        }
+    };
+
+    let mut ccr = ConditionCode::empty();
+
+    ccr.set(
+        ConditionCode::X,
+        cpu.registers.ccr.contains(ConditionCode::X),
+    );
+
+    ccr.set(ConditionCode::N, is_negative(&size, result));
+    ccr.set(ConditionCode::Z, is_zero(&size, result));
+    if bit {
+        if count > 0 {
+            ccr |= ConditionCode::C;
+        }
+    }
+
+    (result, ccr)
 }
 
 fn shift_right(size: DataSize, count: u32, value: Value) -> (Value, ConditionCode) {
@@ -805,14 +1129,31 @@ fn set_bit(val: u32, bit: u32) -> u32 {
     }
 }
 
+fn reverse_bits(input: u8) -> u8 {
+    let mut x = 0;
+    let mut n = input;
+    for _ in 0..8 {
+        x <<= 1;
+        x |= n & 1;
+        n >>= 1;
+    }
+
+    x
+}
 #[test]
 fn test_test_bit() {
     assert_eq!(true, test_bit(0b1111_1111, 7));
     assert_eq!(false, test_bit(0b0111_1111, 7));
 }
 
+#[test]
 fn test_set_bit() {
     assert_eq!(0b1111_1111, set_bit(0b1111_1111, 7));
     assert_eq!(0b1111_1111, set_bit(0b0111_1111, 7));
     assert_eq!(0b0100_0000, set_bit(0b0000_0000, 6));
+}
+
+#[test]
+fn test_reverse_bits() {
+    assert_eq!(0b1111_0000, reverse_bits(0b0000_1111));
 }
